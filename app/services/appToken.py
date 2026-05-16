@@ -6,7 +6,6 @@ import secrets
 from datetime import datetime
 
 from app.models.appToken import AppToken
-from app.models.user import User
 from app.utils.hashing import hash_token
 from app.models.metricEvent import MetricEvent
 
@@ -15,38 +14,26 @@ class AppTokenService:
     def __init__(self, db: Session):
         self.db = db
     
-    def generate_token(self, user_id: int, label: str) -> dict:
+    def generate_token(self, label: str) -> dict:
         """
-        Generate a new app token for a user
-        Returns the raw token (to show once) and the created token object
+        Generate a new app token.
+        Returns the raw token (shown once) plus the created token metadata.
         """
-        # Check if user exists
-        user = self.db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Generate raw token
         raw_token = secrets.token_urlsafe(32)
-        token_hash = hash_token(raw_token)  # Hash the token for storage
-        
-        # Create token record
-        db_token = AppToken(
-            user_id=user_id,
-            token_hash=token_hash,
-            label=label
-        )
-        
+        token_hash = hash_token(raw_token)
+
+        db_token = AppToken(token_hash=token_hash, label=label)
+
         try:
             self.db.add(db_token)
             self.db.commit()
             self.db.refresh(db_token)
-            
-            # Return the raw token (only shown once!)
+
             return {
                 "token": raw_token,
                 "token_id": db_token.id,
                 "label": db_token.label,
-                "created_at": db_token.created_at
+                "created_at": db_token.created_at,
             }
         except SQLAlchemyError as e:
             self.db.rollback()
