@@ -1,8 +1,8 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 
 from app.db.database import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -13,12 +13,10 @@ class User(Base):
     password = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    app_tokens = relationship("AppToken",back_populates="user",cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User id={self.id} username={self.username} email={self.email}>"
-    
+
     @classmethod
     def get_by_id(cls, db, user_id: int):
         return db.query(cls).filter(cls.id == user_id).first()
