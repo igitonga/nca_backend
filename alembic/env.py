@@ -8,7 +8,9 @@ from app.db.database import DATABASE_URL
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.db.database import Base
-from app.models.user import *
+from app.models.user import User  # noqa: F401
+from app.models.appToken import AppToken  # noqa: F401
+from app.models.metricEvent import MetricEvent  # noqa: F401
 
 config = context.config
 

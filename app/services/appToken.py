@@ -7,8 +7,8 @@ from datetime import datetime
 
 from app.models.appToken import AppToken
 from app.models.user import User
-from app.utils.hashing import hash_token  
-from backend.app.models.metricEvent import MetricEvent
+from app.utils.hashing import hash_token
+from app.models.metricEvent import MetricEvent
 
 
 class AppTokenService:
