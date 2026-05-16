@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from app.models.appToken import AppToken 
+from app.models.appToken import AppToken
 from app.services.metricEvent import MetricEventService
-from app.db.database import get_db 
-from app.utils.user import get_current_user, require_admin_role 
-from app.utils.jwt import verify_token
+from app.db.database import get_db
+from app.utils.user import get_current_user, require_admin_role
 
-router = APIRouter(prefix="/metrics", tags=["metrics"], dependencies=[Depends(verify_token)])
+router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 @router.get("/summary")
 async def get_metrics_summary(
@@ -50,24 +49,19 @@ async def get_metrics_summary(
         )
     
     service = MetricEventService(db)
-    
+
     try:
+        summary = service.get_metrics_summary(app_token.id, time_range_days)
+        # TODO: implement get_metrics_summary_with_trends; for now expose a
+        # placeholder so the include_trends flag remains a stable contract.
         if include_trends:
-            summary = service.get_metrics_summary_with_trends(
-                app_token.id,
-                time_range_days
-            )
-        else:
-            summary = service.get_metrics_summary(
-                app_token.id,
-                time_range_days
-            )
-        
+            summary = {**summary, "trends": None}
+
         return {
             "status": "success",
             "data": summary
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,

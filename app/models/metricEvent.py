@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from app.db.database import Base 
+from app.db.database import Base
 
 class MetricEvent(Base):
     __tablename__ = "metric_events"
@@ -13,7 +14,7 @@ class MetricEvent(Base):
     unit = Column(String, nullable=True)
     session_id = Column(String, nullable=False)
     device_id = Column(String, nullable=False)
-    attributes = Column(JSON, nullable=True)  
+    attributes = Column(JSONB, nullable=True)
     created_at = Column(
         DateTime(timezone=True), 
         server_default=func.now(), 

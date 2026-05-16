@@ -1,9 +1,19 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, case, desc
+from sqlalchemy import func, and_, or_, case, desc, Float, cast
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
-from app.models.metricEvent import MetricEvent  
+from app.models.metricEvent import MetricEvent
 import json
+
+
+def _attr_text(field: str):
+    """Postgres JSON ->> accessor returning text."""
+    return MetricEvent.attributes[field].astext
+
+
+def _attr_float(field: str):
+    """Postgres JSON ->> accessor cast to float for numeric aggregations."""
+    return cast(MetricEvent.attributes[field].astext, Float)
 
 class MetricEventService:
     def __init__(self, db: Session):
@@ -91,7 +101,7 @@ class MetricEventService:
         # 4. Average app start time (in milliseconds)
         # Assuming app_start events have value field containing start time in ms
         avg_start_time_query = self.db.query(
-            func.avg(func.cast(MetricEvent.value, func.Float))
+            func.avg(cast(MetricEvent.value, Float))
         ).filter(
             and_(
                 base_filter,
@@ -154,8 +164,8 @@ class MetricEventService:
             MetricEvent.id.label('view_id'),
             MetricEvent.session_id,
             MetricEvent.created_at.label('view_time'),
-            func.json_extract(MetricEvent.attributes, '$.screen_name').label('screen_name'),
-            func.json_extract(MetricEvent.attributes, '$.screen').label('screen_name_alt')
+            _attr_text('screen_name').label('screen_name'),
+            _attr_text('screen').label('screen_name_alt')
         ).filter(
             and_(
                 base_filter,
@@ -167,8 +177,8 @@ class MetricEventService:
         screen_exits = self.db.query(
             MetricEvent.session_id,
             MetricEvent.created_at.label('exit_time'),
-            func.json_extract(MetricEvent.attributes, '$.screen_name').label('exit_screen_name'),
-            func.json_extract(MetricEvent.attributes, '$.screen').label('exit_screen_name_alt')
+            _attr_text('screen_name').label('exit_screen_name'),
+            _attr_text('screen').label('exit_screen_name_alt')
         ).filter(
             and_(
                 base_filter,
@@ -243,18 +253,18 @@ class MetricEventService:
             )
         
         results = self.db.query(
-            func.json_extract(MetricEvent.attributes, '$.screen_name').label('screen_name'),
-            func.json_extract(MetricEvent.attributes, '$.screen').label('screen_name_alt'),
+            _attr_text('screen_name').label('screen_name'),
+            _attr_text('screen').label('screen_name_alt'),
             func.count(MetricEvent.id).label('visit_count'),
-            func.avg(func.json_extract(MetricEvent.attributes, '$.duration_ms')).label('avg_duration_ms')
+            func.avg(_attr_float('duration_ms')).label('avg_duration_ms')
         ).filter(
             and_(
                 base_filter,
-                func.json_extract(MetricEvent.attributes, '$.duration_ms').isnot(None)
+                _attr_text('duration_ms').isnot(None)
             )
         ).group_by(
-            func.json_extract(MetricEvent.attributes, '$.screen_name'),
-            func.json_extract(MetricEvent.attributes, '$.screen')
+            _attr_text('screen_name'),
+            _attr_text('screen')
         ).order_by(
             desc('avg_duration_ms')
         ).limit(limit).all()
@@ -325,14 +335,14 @@ class MetricEventService:
         
         # Get duration and status code from attributes or value field
         query = self.db.query(
-            func.json_extract(MetricEvent.attributes, '$.duration_ms').label('duration_ms'),
-            func.json_extract(MetricEvent.attributes, '$.response_time_ms').label('response_time_ms'),
-            func.json_extract(MetricEvent.attributes, '$.status_code').label('status_code'),
-            func.json_extract(MetricEvent.attributes, '$.status').label('status'),
-            func.json_extract(MetricEvent.attributes, '$.url').label('url'),
-            func.json_extract(MetricEvent.attributes, '$.endpoint').label('endpoint'),
-            func.json_extract(MetricEvent.attributes, '$.path').label('path'),
-            func.json_extract(MetricEvent.attributes, '$.method').label('method'),
+            _attr_text('duration_ms').label('duration_ms'),
+            _attr_text('response_time_ms').label('response_time_ms'),
+            _attr_text('status_code').label('status_code'),
+            _attr_text('status').label('status'),
+            _attr_text('url').label('url'),
+            _attr_text('endpoint').label('endpoint'),
+            _attr_text('path').label('path'),
+            _attr_text('method').label('method'),
             MetricEvent.value.label('value_duration')  # Fallback if duration in value field
         ).filter(
             and_(base_filter, MetricEvent.event_type == 'http_performance')
@@ -442,11 +452,11 @@ class MetricEventService:
             MetricEvent.id.label('request_id'),
             MetricEvent.session_id,
             MetricEvent.created_at.label('request_time'),
-            func.json_extract(MetricEvent.attributes, '$.url').label('url'),
-            func.json_extract(MetricEvent.attributes, '$.endpoint').label('endpoint'),
-            func.json_extract(MetricEvent.attributes, '$.path').label('path'),
-            func.json_extract(MetricEvent.attributes, '$.method').label('method'),
-            func.json_extract(MetricEvent.attributes, '$.request_id').label('request_identifier')
+            _attr_text('url').label('url'),
+            _attr_text('endpoint').label('endpoint'),
+            _attr_text('path').label('path'),
+            _attr_text('method').label('method'),
+            _attr_text('request_id').label('request_identifier')
         ).filter(
             and_(base_filter, MetricEvent.event_type == 'http_request')
         ).subquery()
@@ -455,10 +465,10 @@ class MetricEventService:
         responses = self.db.query(
             MetricEvent.session_id,
             MetricEvent.created_at.label('response_time'),
-            func.json_extract(MetricEvent.attributes, '$.status_code').label('status_code'),
-            func.json_extract(MetricEvent.attributes, '$.status').label('status'),
-            func.json_extract(MetricEvent.attributes, '$.duration_ms').label('duration_ms'),
-            func.json_extract(MetricEvent.attributes, '$.request_id').label('request_identifier')
+            _attr_text('status_code').label('status_code'),
+            _attr_text('status').label('status'),
+            _attr_text('duration_ms').label('duration_ms'),
+            _attr_text('request_id').label('request_identifier')
         ).filter(
             and_(base_filter, MetricEvent.event_type == 'http_response')
         ).subquery()
@@ -603,13 +613,13 @@ class MetricEventService:
         
         # Get performance data
         query = self.db.query(
-            func.json_extract(MetricEvent.attributes, '$.endpoint').label('endpoint'),
-            func.json_extract(MetricEvent.attributes, '$.path').label('path'),
-            func.json_extract(MetricEvent.attributes, '$.url').label('url'),
-            func.json_extract(MetricEvent.attributes, '$.method').label('method'),
-            func.json_extract(MetricEvent.attributes, '$.duration_ms').label('duration_ms'),
-            func.json_extract(MetricEvent.attributes, '$.response_time_ms').label('response_time_ms'),
-            func.json_extract(MetricEvent.attributes, '$.status_code').label('status_code'),
+            _attr_text('endpoint').label('endpoint'),
+            _attr_text('path').label('path'),
+            _attr_text('url').label('url'),
+            _attr_text('method').label('method'),
+            _attr_text('duration_ms').label('duration_ms'),
+            _attr_text('response_time_ms').label('response_time_ms'),
+            _attr_text('status_code').label('status_code'),
             MetricEvent.value.label('value_duration')
         ).filter(
             and_(base_filter, MetricEvent.event_type == 'http_performance')
@@ -618,9 +628,9 @@ class MetricEventService:
         if endpoint_filter:
             query = query.filter(
                 or_(
-                    func.json_extract(MetricEvent.attributes, '$.endpoint').like(f"%{endpoint_filter}%"),
-                    func.json_extract(MetricEvent.attributes, '$.path').like(f"%{endpoint_filter}%"),
-                    func.json_extract(MetricEvent.attributes, '$.url').like(f"%{endpoint_filter}%")
+                    _attr_text('endpoint').like(f"%{endpoint_filter}%"),
+                    _attr_text('path').like(f"%{endpoint_filter}%"),
+                    _attr_text('url').like(f"%{endpoint_filter}%")
                 )
             )
         
@@ -906,13 +916,11 @@ class MetricEventService:
         # Subquery for average memory usage (assuming memory in attributes.memory_mb)
         memory_per_device = self.db.query(
             MetricEvent.device_id,
-            func.avg(
-                func.json_extract(MetricEvent.attributes, '$.memory_mb')
-            ).label('avg_memory_mb')
+            func.avg(_attr_float('memory_mb')).label('avg_memory_mb')
         ).filter(
             and_(
                 base_filter,
-                func.json_extract(MetricEvent.attributes, '$.memory_mb').isnot(None)
+                _attr_text('memory_mb').isnot(None)
             )
         ).group_by(MetricEvent.device_id).subquery()
         

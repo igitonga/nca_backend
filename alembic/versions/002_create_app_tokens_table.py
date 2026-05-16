@@ -2,6 +2,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision: str = "002"
 down_revision: Union[str, None] = "001"
@@ -40,7 +41,7 @@ def upgrade() -> None:
         sa.Column("unit", sa.String(), nullable=True),
         sa.Column("session_id", sa.String(), nullable=False),
         sa.Column("device_id", sa.String(), nullable=False),
-        sa.Column("attributes", sa.String(), nullable=True),
+        sa.Column("attributes", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
