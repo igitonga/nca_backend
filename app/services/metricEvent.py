@@ -1,8 +1,11 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import func, and_, or_, case, desc, Float, cast
+from fastapi import HTTPException, status
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 from app.models.metricEvent import MetricEvent
+from app.models.appToken import AppToken
 import json
 
 
@@ -18,7 +21,51 @@ def _attr_float(field: str):
 class MetricEventService:
     def __init__(self, db: Session):
         self.db = db
-    
+
+    def create_event(
+        self,
+        app_token_id: int,
+        event_type: str,
+        session_id: str,
+        device_id: str,
+        value: Optional[str] = None,
+        unit: Optional[str] = None,
+        attributes: Optional[Dict[str, Any]] = None,
+    ) -> MetricEvent:
+        """Persist a single metric event for the given app token."""
+        if not self.db.get(AppToken, app_token_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="App token not found",
+            )
+
+        event = MetricEvent(
+            app_token_id=app_token_id,
+            event_type=event_type,
+            session_id=session_id,
+            device_id=device_id,
+            value=value,
+            unit=unit,
+            attributes=attributes,
+        )
+        try:
+            self.db.add(event)
+            self.db.commit()
+            self.db.refresh(event)
+            return event
+        except IntegrityError:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid app_token_id",
+            )
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create metric event: {str(e)}",
+            )
+
     def get_metrics_summary(
         self, 
         app_token_id: int,
