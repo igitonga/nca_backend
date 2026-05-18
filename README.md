@@ -18,11 +18,12 @@ A FastAPI backend for collecting and querying app analytics — sessions, screen
 4. [Environment variables](#environment-variables)
 5. [Database migrations](#database-migrations)
 6. [Verifying the setup](#verifying-the-setup)
-7. [API reference](#api-reference)
-8. [Project structure](#project-structure)
-9. [Common tasks](#common-tasks)
-10. [Troubleshooting](#troubleshooting)
-11. [Known caveats](#known-caveats)
+7. [Connecting pgAdmin to the database](#connecting-pgadmin-to-the-database)
+8. [API reference](#api-reference)
+9. [Project structure](#project-structure)
+10. [Common tasks](#common-tasks)
+11. [Troubleshooting](#troubleshooting)
+12. [Known caveats](#known-caveats)
 
 ---
 
@@ -221,6 +222,78 @@ If all five succeed, the stack is wired correctly.
 
 ---
 
+## Connecting pgAdmin to the database
+
+`docker compose up` starts a pgAdmin instance at **http://localhost:5050**, but the Postgres server connection inside pgAdmin is **not pre-configured** — you need to register it once. The `nca` database itself is auto-created by the Postgres container on first start (driven by `POSTGRES_DB` in `.env`), so as soon as the server connection is wired, the database appears.
+
+### One-time setup
+
+1. **Wait for the stack to be healthy.** Run `docker compose ps` and confirm the `db` container shows `(healthy)`. If it's still `(starting)`, give it a few seconds — `alembic` and pgAdmin will both fail to connect until the healthcheck passes.
+
+2. **Open pgAdmin in your browser:** http://localhost:5050
+
+3. **Log in** with the values of `PGADMIN_EMAIL` and `PGADMIN_PASSWORD` from your `.env`. With the defaults from `.env.example`:
+   - Email: `admin@example.com`
+   - Password: `password`
+
+4. **Register the Postgres server.** In the left sidebar:
+   - Right-click **Servers** → **Register** → **Server...**
+   - **General** tab:
+     - *Name:* anything memorable, e.g. `nca local`
+   - **Connection** tab:
+     - *Host name/address:* **`db`** ← the docker-compose service name. pgAdmin and Postgres are on the same internal Docker network (`app-network`), and that's the hostname pgAdmin uses to reach the DB.
+       > Do **not** put `localhost` here. From pgAdmin's perspective (inside its own container), `localhost` is itself, not Postgres.
+     - *Port:* `5432`
+     - *Maintenance database:* `postgres`
+     - *Username:* value of `POSTGRES_USER` (default `postgres`)
+     - *Password:* value of `POSTGRES_PASSWORD` (default `postgres`)
+     - *Save password?* tick it for convenience (dev only).
+   - Click **Save**.
+
+5. **Verify in the tree.** Expand the new server node in the sidebar:
+   - `Servers → nca local → Databases` — you should see your DB (default name `nca`).
+   - `nca → Schemas → public → Tables` — after you've run `alembic upgrade head`, this lists `users`, `app_tokens`, `metric_events`, and `alembic_version`. Before migrations, it's empty.
+
+### Running queries
+
+Right-click the `nca` database → **Query Tool** opens a SQL editor. Try:
+
+```sql
+SELECT id, email, username, role, created_at FROM users;
+SELECT id, label, created_at FROM app_tokens;
+SELECT event_type, COUNT(*) FROM metric_events GROUP BY event_type;
+```
+
+### Manually creating a database (rarely needed)
+
+The Postgres container auto-creates `POSTGRES_DB` on first startup, so you almost never need to. If you do want a second DB for some reason:
+
+- **In pgAdmin:** right-click **Databases** under your registered server → **Create** → **Database...**, fill in a name, click **Save**.
+- **From your host shell:**
+  ```bash
+  PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE my_other_db;"
+  ```
+
+### Connecting other tools (DBeaver, TablePlus, psql) from your host
+
+The Postgres container publishes port 5432 to your host, so external tools can use:
+
+- **Host:** `localhost`
+- **Port:** `5432`
+- **Database:** `nca` (or whatever `POSTGRES_DB` is)
+- **Username / password:** from `.env`
+
+> The hostname mismatch is intentional: external tools running **on your host** use `localhost`, because that's where the published port lives. pgAdmin (which itself runs **inside** a Docker container) uses `db`, because that's the Docker-network hostname for the Postgres service. Same database, two different network paths.
+
+### pgAdmin troubleshooting
+
+- **"Unable to connect to server: could not translate host name..."** — you probably typed `localhost` for *Host name/address*. Change it to `db`.
+- **"Connection refused"** — Postgres isn't healthy yet. `docker compose ps` should show `db` as `(healthy)`. Wait, or check `docker compose logs db`.
+- **Server registered but database list is empty** — Postgres is up, but the `POSTGRES_DB` value from `.env` was empty or wrong when the container first started. Easiest fix: `docker compose down -v` (destroys data!) then `docker compose up` so the DB is re-initialized with the current `.env`.
+- **pgAdmin forgets your server after a restart** — it shouldn't; pgAdmin state lives in the `pgadmin_data` Docker volume. If you ran `docker compose down -v`, that volume was removed and you'll need to re-register.
+
+---
+
 ## API reference
 
 All endpoints return JSON. Errors come back as `{"detail": "..."}` with the appropriate 4xx/5xx status.
@@ -293,7 +366,7 @@ The interactive Swagger UI at `/docs` has the full parameter list and lets you t
 ```bash
 PGPASSWORD=postgres psql -h localhost -U postgres -d nca
 ```
-**Connect pgAdmin to the dockerized DB:** in the pgAdmin UI, "Add new server" → Host: `db`, Port: `5432`, Username/Password: from `.env`.
+**Connect pgAdmin to the dockerized DB:** see [Connecting pgAdmin to the database](#connecting-pgadmin-to-the-database) for the full walkthrough.
 
 **Reset the database (destroys data):**
 ```bash
