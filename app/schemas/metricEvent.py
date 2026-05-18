@@ -1,36 +1,28 @@
-# Add to app/schemas/metric_event.py
-
-from pydantic import BaseModel
-from typing import Dict, Optional, List
-
-
-class StatusCodeBreakdown(BaseModel):
-    status_code: int
-    count: int
+from datetime import datetime
+from typing import Any, Dict, Optional
+from pydantic import BaseModel, Field
 
 
-class SlowestEndpoint(BaseModel):
-    endpoint: str
-    avg_latency_ms: float
-    total_requests: int
-    error_rate: float
+class MetricEventCreate(BaseModel):
+    app_token_id: int = Field(..., gt=0)
+    event_type: str = Field(..., min_length=1, max_length=255)
+    session_id: str = Field(..., min_length=1, max_length=255)
+    device_id: str = Field(..., min_length=1, max_length=255)
+    value: Optional[str] = None
+    unit: Optional[str] = None
+    attributes: Optional[Dict[str, Any]] = None
 
 
-class HttpPerformanceResponse(BaseModel):
-    total_requests: int
-    error_rate: float
-    error_count: int
-    avg_latency_ms: float
-    p50_latency_ms: float
-    p90_latency_ms: float
-    p95_latency_ms: float
-    p99_latency_ms: float
-    throughput_requests_per_minute: float
-    status_code_breakdown: Dict[int, int]
-    slowest_endpoints: List[SlowestEndpoint]
-    success_rate: float
-    performance_grade: Optional[str] = None
-    date_range: Optional[Dict[str, Optional[str]]] = None
-    
+class MetricEventResponse(BaseModel):
+    id: int
+    app_token_id: int
+    event_type: str
+    session_id: str
+    device_id: str
+    value: Optional[str] = None
+    unit: Optional[str] = None
+    attributes: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
     class Config:
         from_attributes = True

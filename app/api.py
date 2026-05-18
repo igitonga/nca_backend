@@ -6,6 +6,7 @@ from app.services.user import create_user, login_user
 from app.routers import auth
 from app.routers import metrics
 from app.routers import appToken
+from app.routers import metricEvent
 
 app = FastAPI()
 
@@ -27,6 +28,8 @@ app.include_router(auth.router)
 app.include_router(metrics.router)
 
 app.include_router(appToken.router)
+
+app.include_router(metricEvent.router)
 
 @app.get("/", tags=["root"])
 async def read_root() -> dict:
